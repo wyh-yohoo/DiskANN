@@ -29,10 +29,21 @@ namespace diskann
 {
 // Initialize an index with metric m, load the data of type T with filename
 // (bin), and initialize max_points
+
+#ifdef EXEC_ENV_OLS
 template <typename T, typename TagT, typename LabelT>
-Index<T, TagT, LabelT>::Index(const IndexConfig &index_config, std::shared_ptr<AbstractDataStore<T>> data_store,
+Index<T, TagT, LabelT>::Index(const IndexConfig &index_config, MemoryMappedFiles &files,
+                              std::shared_ptr<AbstractDataStore<T>> data_store,
                               std::unique_ptr<AbstractGraphStore> graph_store,
                               std::shared_ptr<AbstractDataStore<T>> pq_data_store)
+#else
+template <typename T, typename TagT, typename LabelT>
+Index<T, TagT, LabelT>::Index(const IndexConfig &index_config,
+                              std::shared_ptr<AbstractDataStore<T>> data_store,
+                              std::unique_ptr<AbstractGraphStore> graph_store,
+                              std::shared_ptr<AbstractDataStore<T>> pq_data_store)
+#endif
+
     : _dist_metric(index_config.metric), _dim(index_config.dimension), _max_points(index_config.max_points),
       _num_frozen_pts(index_config.num_frozen_pts), _dynamic_index(index_config.dynamic_index),
       _enable_tags(index_config.enable_tags), _indexingMaxC(DEFAULT_MAXC), _query_scratch(nullptr),
@@ -111,13 +122,25 @@ Index<T, TagT, LabelT>::Index(const IndexConfig &index_config, std::shared_ptr<A
     }
 }
 
+
+#ifdef EXEC_ENV_OLS
+DISKANN_DLLEXPORT Index(Metric m, const size_t dim, const size_t max_points,
+                        const std::shared_ptr<IndexWriteParameters> index_parameters,
+                        const std::shared_ptr<IndexSearchParams> index_search_params, MemoryMappedFiles &files,
+                        const std::string &codebook_path = "", const size_t num_frozen_pts = 0,
+                        const bool dynamic_index = false, const bool enable_tags = false,
+                        const bool concurrent_consolidate = false, const bool pq_dist_build = false,
+                        const size_t num_pq_chunks = 0, const bool use_opq = false, const bool filtered_index = false)
+#else
 template <typename T, typename TagT, typename LabelT>
 Index<T, TagT, LabelT>::Index(Metric m, const size_t dim, const size_t max_points,
                               const std::shared_ptr<IndexWriteParameters> index_parameters,
-                              const std::shared_ptr<IndexSearchParams> index_search_params, const size_t num_frozen_pts,
+                              const std::shared_ptr<IndexSearchParams> index_search_params,
+                              const std::string &codebook_path, const size_t num_frozen_pts,
                               const bool dynamic_index, const bool enable_tags, const bool concurrent_consolidate,
                               const bool pq_dist_build, const size_t num_pq_chunks, const bool use_opq,
                               const bool filtered_index)
+#endif
     : Index(IndexConfigBuilder()
                 .with_metric(m)
                 .with_dimension(dim)
@@ -133,6 +156,7 @@ Index<T, TagT, LabelT>::Index(Metric m, const size_t dim, const size_t max_point
                 .is_use_opq(use_opq)
                 .is_filtered(filtered_index)
                 .with_data_type(diskann_type_to_name<T>())
+                .with_pq_codebook_path(codebook_path)
                 .build(),
             IndexFactory::construct_datastore<T>(
                 DataStoreStrategy::MEMORY,
@@ -145,8 +169,8 @@ Index<T, TagT, LabelT>::Index(Metric m, const size_t dim, const size_t max_point
 {
     if (_pq_dist)
     {
-        _pq_data_store = IndexFactory::construct_pq_datastore<T>(DataStoreStrategy::MEMORY, max_points + num_frozen_pts,
-                                                                 dim, m, num_pq_chunks, use_opq);
+        _pq_data_store = IndexFactory::construct_pq_datastore<T>(
+            DataStoreStrategy::MEMORY, codebook_path, max_points + num_frozen_pts, dim, m, num_pq_chunks, use_opq);
     }
     else
     {
